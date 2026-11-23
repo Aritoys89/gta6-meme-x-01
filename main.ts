@@ -1,37 +1,78 @@
-// Entry point for the gta6-meme-x-01 submission.
+// Entry point for the gta6-meme-x-01 make.fun entry.
 //
-// The deliverable of this repo is a single published post, recorded in
-// POST.json. Judges run this file to collect that record: it copies
-// POST.json into the output directory so the post can be graded
-// without digging through the repo.
-//
-// Output location: /output by default, or $MAKEFUN_OUTPUT_DIR when
-// the runner provides one.
+// The grader mounts this repository read-only and starts this file from an
+// unrelated working directory, so nothing here may be resolved from
+// process.cwd(). POST.json always sits beside this script: the directory
+// comes from MAKEFUN_BOT_DIR when the runner provides it, and otherwise
+// from this file's own folder.
 
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
+const fs = require("node:fs");
+const path = require("node:path");
 
-const sourcePath = join(process.cwd(), "POST.json");
-const outputDir = process.env.MAKEFUN_OUTPUT_DIR ?? "/output";
-const targetPath = join(outputDir, "POST.json");
+function botDir() {
+  const fromEnv = process.env.MAKEFUN_BOT_DIR;
+  if (typeof fromEnv === "string" && fromEnv.trim() !== "") {
+    return fromEnv;
+  }
+  return __dirname;
+}
 
-const payload = readFileSync(sourcePath, "utf8");
+function outputDir() {
+  const fromEnv = process.env.MAKEFUN_OUTPUT_DIR;
+  if (typeof fromEnv === "string" && fromEnv.trim() !== "") {
+    return fromEnv;
+  }
+  return "/output";
+}
 
-// Fail loudly on a malformed record instead of handing the judges a
-// broken file: POST.json must be JSON with an https x.com post URL.
-let record;
+function readPostJson() {
+  const postPath = path.join(botDir(), "POST.json");
+  let raw;
+  try {
+    raw = fs.readFileSync(postPath);
+  } catch (err) {
+    throw new Error("cannot read POST.json at " + postPath + ": " + err.message);
+  }
+
+  let data;
+  try {
+    data = JSON.parse(raw.toString("utf8"));
+  } catch (err) {
+    throw new Error("POST.json is not valid JSON: " + err.message);
+  }
+
+  const url = data && typeof data.url === "string" ? data.url : "";
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch (err) {
+    throw new Error("POST.json does not contain a usable url field");
+  }
+  if (parsed.protocol !== "https:") {
+    throw new Error("post URL must use https, got: " + url);
+  }
+  if (parsed.hostname !== "x.com" && !parsed.hostname.endsWith(".x.com")) {
+    throw new Error("post URL must be on x.com, got host: " + parsed.hostname);
+  }
+  if (!parsed.pathname.includes("/status/")) {
+    throw new Error("post URL must point at a post (missing /status/): " + url);
+  }
+
+  return raw;
+}
+
+function main() {
+  const raw = readPostJson();
+  const targetDir = outputDir();
+  fs.mkdirSync(targetDir, { recursive: true });
+  const target = path.join(targetDir, "POST.json");
+  fs.writeFileSync(target, raw);
+  console.log("wrote " + target + " (" + raw.length + " bytes)");
+}
+
 try {
-  record = JSON.parse(payload);
-} catch {
-  console.error(`error: ${sourcePath} is not valid JSON`);
+  main();
+} catch (err) {
+  console.error("meme entry failed: " + (err && err.message ? err.message : err));
   process.exit(1);
 }
-if (typeof record?.url !== "string" || !/^https:\/\/x\.com\/\S+$/.test(record.url)) {
-  console.error(`error: ${sourcePath} must contain an https://x.com post URL in its "url" field`);
-  process.exit(1);
-}
-
-mkdirSync(outputDir, { recursive: true });
-writeFileSync(targetPath, payload);
-
-console.log(`wrote ${targetPath} (${payload.length} bytes)`);
