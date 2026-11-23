@@ -15,3 +15,5 @@ bounty link in the text, and `POST.json` names that post's address. `main.ts`
 (Node 22, standard library only) simply copies `POST.json` to the output
 directory, where the make.fun gate reads it. The caption draft lives in
 `caption.txt`.
+
+The post is published and live on X: https://x.com/thetoyan/status/2124752790971195594
